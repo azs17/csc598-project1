@@ -36,12 +36,23 @@ y_val = F.one_hot(val_ds_labels.long(), 10).type(torch.float32)
 y_train = F.one_hot(train_ds_labels.long(), 10).type(torch.float32)
 y_test = F.one_hot(testset_labels_tens.long(), 10).type(torch.float32)
 
+train_ds = train_ds.permute(0,3,1,2)
+val_ds = val_ds.permute(0,3,1,2)
+test_ds = test_ds.permute(0,3,1,2)
+
 print(train_ds.shape)
 print(train_ds_labels.shape)
 print(val_ds.shape)
 print(val_ds_labels.shape)
 print(test_ds.shape)
 print(testset_labels_tens.shape)
+
+n_train = train_ds.shape[0]
+n_test  = test_ds.shape[0]
+sY = train_ds[1]
+sX = train_ds.shape[2]
+n_class = 10
+chan  = 1
 
 #-------------------
 # Residual Block
@@ -50,15 +61,16 @@ print(testset_labels_tens.shape)
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride = 1, downsample = None):
         super(ResidualBlock, self).__init__()
-        self.conv1 = nn.Sequential(
-                        nn.Conv2d(in_channels, out_channels, kernel_size = 3, stride = stride, padding = 1),
+        self.layer1 = nn.Sequential(
+                        nn.Conv2d(in_channels, out_channels, kernel_size = 7, stride = 2, padding = 2),
                         nn.BatchNorm2d(out_channels),
-                        nn.ReLU())
-        self.conv2 = nn.Sequential(
-                        nn.Conv2d(out_channels, out_channels, kernel_size = 3, stride = 1, padding = 1),
+                        nn.LeakyReLU())
+        self.layer1a = nn.Sequential(
+                        nn.Conv2d(out_channels, out_channels, kernel_size = 7, stride = 2, padding = 2),
                         nn.BatchNorm2d(out_channels))
+        
         self.downsample = downsample
-        self.relu = nn.ReLU()
+        self.relu = nn.LeakyReLU()
         self.out_channels = out_channels
         
     def forward(self, x):
@@ -76,51 +88,111 @@ class ResidualBlock(nn.Module):
     #----------------------
 
 class ResNet(nn.Module):
-    def __init__(self, block, layers, num_classes = 10):
+
+    def __init__(self):
         super(ResNet, self).__init__()
-        self.inplanes = 64
-        self.conv1 = nn.Sequential(
-                        nn.Conv2d(3, 64, kernel_size = 7, stride = 2, padding = 3),
-                        nn.BatchNorm2d(64),
-                        nn.ReLU())
-        self.maxpool = nn.MaxPool2d(kernel_size = 3, stride = 2, padding = 1)
-        self.layer0 = self._make_layer(block, 64, layers[0], stride = 1)
-        self.layer1 = self._make_layer(block, 128, layers[1], stride = 2)
-        self.layer2 = self._make_layer(block, 256, layers[2], stride = 2)
-        self.layer3 = self._make_layer(block, 512, layers[3], stride = 2)
-        self.avgpool = nn.AvgPool2d(7, stride=1)
-        self.fc = nn.Linear(512, num_classes)
+
         
-    def _make_layer(self, block, planes, blocks, stride=1):
-        downsample = None
-        if stride != 1 or self.inplanes != planes:
-            
-            downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=stride),
-                nn.BatchNorm2d(planes),
-            )
-        layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample))
-        self.inplanes = planes
-        for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+        
+        self.conv1 = nn.Conv2d(3,16, 3, bias=True, padding = 1)
+        self.BatchNorm1 = nn.BatchNorm2d(16)
+        self.rel1 = nn.LeakyReLU()
+        self.conv2 = nn.Conv2d(16,16, 3, bias=True, padding = 1)
+        self.BatchNorm2 = nn.BatchNorm2d(16)
 
-        return nn.Sequential(*layers)
-    
-    
+        self.rl1 = nn.LeakyReLU()
+        self.avgpool1 = nn.AvgPool2d(kernel_size= 2, stride = 2)
+
+        self.conv3 = nn.Conv2d(16,16, 3, bias=True, padding = 1)
+        self.BatchNorm3 = nn.BatchNorm2d(16)
+        self.rel3 = nn.LeakyReLU()
+        self.conv4 = nn.Conv2d(16,16, 3, bias=True, padding = 1)
+        self.BatchNorm4 = nn.BatchNorm2d(16)
+
+        self.rel2 = nn.LeakyReLU()
+        self.avgpool2 = nn.AvgPool2d(kernel_size= 2, stride = 2)
+
+        self.conv5 = nn.Conv2d(16,16, 3, bias=True, padding = 1)
+        self.BatchNorm5 = nn.BatchNorm2d(16)
+        self.rel3 = nn.LeakyReLU()
+        self.conv6 = nn.Conv2d(16,16, 3, bias=True, padding = 1)
+        self.BatchNorm6 = nn.BatchNorm2d(16)
+
+        self.rel4 = nn.LeakyReLU()
+        self.lin1 = nn.Linear(1024, 512)
+        self.rel5 = nn.LeakyReLU()
+        self.lin2 = nn.Linear(512, 10)
+
+
+
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.maxpool(x)
-        x = self.layer0(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
+        #print("FORWARD CHK")
+        batch_size = x.shape[0]
+        chan       = x.shape[1]
+        sY         = x.shape[2]
+        sX         = x.shape[3]
+        
+        #print("x SHAPE:" ,x.shape)
+        a = self.conv1(x)
+        #print("a SHAPE", a.shape)
+        b = self.BatchNorm1(a)
+        #print("b SHAPE", b.shape)
+        c = self.rel1(b)
+        #print("C SHAPE", c.shape)
+        d = self.conv2(c)
+        #print ("D SHAPE", d.shape)
+        e = self.BatchNorm1(d)
+        #print("E SHAPE", e.shape)
+        e[:,0:3,:,:] = e[:,0:3,:,:] + x
 
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
+        e = self.rl1(e)
+        e = self.avgpool1(e)
+        #print("BLOCK1FINISH")
+        #loss = torch.sum(Y*torch.log(Yhat + .00000000001))
 
-        return x
+        ee = self.conv3(e)
+        #print("EE SHAPE", ee.shape)
+        G = self.BatchNorm3(ee)
+        #print("G SHAPE", G.shape)
+        H = self.rel2(G)
+        #print("H RELU", H.shape)
+        I = self.conv4(H)
+        #print ("I SHAPE", I.shape)
+        J = self.BatchNorm4(I)
+        #print("J SHAPE", J.shape)
+
+        J = self.rel2(J)
+        J = self.avgpool2(J)
+
+        K = self.conv5(J)
+        #print("K SHAPE", K.shape)
+        L = self.BatchNorm5(K)
+        #print("L SHAPE", L.shape)
+        M = self.rel3(L)
+        #print("M SHAPE", M.shape)
+        N = self.conv6(M)
+        #print ("N SHAPE", N.shape)
+        O = self.BatchNorm6(N)
+        #print("O SHAPE", O.shape)
+
+        P = self.rel4(O)
+        # P = torch.reshape(x, (batch_size,chan*sY*sX))
+        P = P.view(x.size(0), -1)
+        #print("P RESHAPE", P.shape)
+        P = self.lin1(P)
+        #print("P SHAPE", P.shape)
+        P = self.rel5(P)
+        #print("P SHAPE", P.shape)
+        P = self.lin2(P)
+       # print("P SHAPE", P.shape)
+
+        
+        z = F.softmax(P,dim=1)
+        return z
+
+
+
+
     
     #--------------------
     # Loop Parameters
@@ -129,13 +201,12 @@ class ResNet(nn.Module):
 num_classes = 10
 num_epochs = 20
 batch_size = 100
-num_batches = 500
-learning_rate = 0.01
+num_batches = 450
+learning_rate = 0.1
 
-model = ResNet(ResidualBlock, [3, 4, 6, 3]).to(my_device)
+model = ResNet().to(my_device)
 
-criterion = nn.CrossEntropyLoss()
-optim = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay = 0.001, momentum = 0.9)  
+optim = torch.optim.SGD(model.parameters(), lr=learning_rate)  
 
 # Train the model
 for epoch in range(num_epochs):
@@ -160,8 +231,11 @@ for epoch in range(num_epochs):
         X = train_ds[sidx:eidx]
         Y = y_train[sidx:eidx]
         
-        # run the model
+        # run 
+        #print("BATCH SHAPE", X.shape)
         Yhat = model(X)
+        #print("Y Shape" ,Y.shape)
+        #print("Yhat Shape", Yhat.shape)
         loss = F.cross_entropy(Yhat,Y)
 
         # gradient descent
@@ -175,13 +249,13 @@ for epoch in range(num_epochs):
     epoch_loss = epoch_loss / n_train
     print('epoch %d loss %f' % (epoch, epoch_loss))
             
-    # Validation
+    #Validation
     with torch.no_grad():
         correct = 0
         total = 0
-        for images, labels in valid_loader:
-            images = images.to(device)
-            labels = labels.to(device)
+        for images, labels in val_ds, val_ds_labels:
+            images = images.to(my_device)
+            labels = labels.to(my_device)
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
